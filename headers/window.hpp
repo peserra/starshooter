@@ -21,11 +21,15 @@ protected:
 private:
   std::default_random_engine m_randomEngine;
 
+  inline static const glm::vec4 m_Green{0.00f, 0.85f, 0.22f, 1.00f};
+  inline static const glm::vec4 m_Red{1.00f, 0.00f, 0.00f, 1.00f};
+
+
   ImFont *m_font{};
   glm::ivec2 m_viewportSize{};
 
   enum class Forms {SQUARE, SPHERE};
-  enum class Colors {GREEN, RED};
+  std::array <glm::vec4, 2> m_colors{m_Green, m_Red};
 
   Forms m_actualTargForm{Forms::SPHERE};
   float m_timeAcc{1.0f};
@@ -59,17 +63,27 @@ private:
     bool m_hit{false};
   };
 
-  std::array<Alvos, 4> m_alvos;
+  int m_faseAtual{0};
 
+
+  std::array<glm::vec3, 4> m_targetScreenPos{
+      glm::vec3{0.25f, 0.25f, -1.0f},
+      glm::vec3{-0.25f, 0.25f, -1.0f},
+      glm::vec3{-0.25f, -0.25f, -1.0f},
+      glm::vec3{0.25f, -0.25f, -1.0f}
+  };
+
+  std::array<Alvos, 4> m_alvos;
   int m_totalPoints{0};
+
   struct Fases{
-    Forms m_form;
-    Colors m_color;
-    std::array<Alvos, 4> m_alvos;
+    Forms m_targetForm;
+    glm::vec4  m_targetColor; // verde ou vermelho (atira nesse ou nao)
+    std::array<Forms, 4> m_targetForms;
     int m_points;
   };
 
-  std::array<Fases, 4> m_fases;
+  std::array<Fases, 5> m_fases;
 
 
   // angulo em radianos que rotaciona cada cubo (cada cubo tem seu proprio eixo
@@ -92,7 +106,7 @@ private:
   // estrela passada como parametro
   void randomizeStar(Star &star);
   void detectTargetPosition();
-  void renderTargets(GLint colorLoc, GLint modelMatrixLoc);
+  void renderTargets(GLint colorLoc, GLint modelMatrixLoc, Fases fase);
 };
 
 #endif

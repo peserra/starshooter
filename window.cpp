@@ -5,42 +5,6 @@
 #include <glm/gtx/fast_trigonometry.hpp>
 
 void Window::onEvent(SDL_Event const &event) {
-  // if (event.type == SDL_KEYDOWN) {
-  //   if (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_w)
-  //     m_dollySpeed = 1.0f;
-  //   if (event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_s)
-  //     m_dollySpeed = -1.0f;
-  //   if (event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_a)
-  //     m_panSpeed = -1.0f;
-  //   if (event.key.keysym.sym == SDLK_RIGHT || event.key.keysym.sym == SDLK_d)
-  //     m_panSpeed = 1.0f;
-  //   if (event.key.keysym.sym == SDLK_q)
-  //     m_truckSpeed = -2.0f;
-  //   if (event.key.keysym.sym == SDLK_e)
-  //     m_truckSpeed = 2.0f;
-  // }
-  // if (event.type == SDL_KEYUP) {
-  //   if ((event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_w)
-  //   &&
-  //       m_dollySpeed > 0)
-  //     m_dollySpeed = 0.0f;
-  //   if ((event.key.keysym.sym == SDLK_DOWN || event.key.keysym.sym == SDLK_s)
-  //   &&
-  //       m_dollySpeed < 0)
-  //     m_dollySpeed = 0.0f;
-  //   if ((event.key.keysym.sym == SDLK_LEFT || event.key.keysym.sym == SDLK_a)
-  //   &&
-  //       m_panSpeed < 0)
-  //     m_panSpeed = 0.0f;
-  //   if ((event.key.keysym.sym == SDLK_RIGHT ||
-  //        event.key.keysym.sym == SDLK_d) &&
-  //       m_panSpeed > 0)
-  //     m_panSpeed = 0.0f;
-  //   if (event.key.keysym.sym == SDLK_q && m_truckSpeed < 0)
-  //     m_truckSpeed = 0.0f;
-  //   if (event.key.keysym.sym == SDLK_e && m_truckSpeed > 0)
-  //     m_truckSpeed = 0.0f;
-  // }
 
   if (event.type == SDL_MOUSEBUTTONUP) {
     if (event.button.button == SDL_BUTTON_LEFT) {
@@ -79,9 +43,9 @@ void Window::onCreate() {
   m_modelSquare.setupVAO(m_program);
   m_trianglesToDraw = m_modelSquare.getNumTriangles();
 
-  // Camera at (0,0,0) and looking towards the negative z
 
   m_viewMatrix = m_camera.getViewMatrix();
+
   // Setup stars
   for (auto &star : m_stars) {
     randomizeStar(star);
@@ -96,6 +60,34 @@ void Window::onCreate() {
   m_font = ImGui::GetIO().Fonts->AddFontFromFileTTF(filename.c_str(), 20.0f);
   if (m_font == nullptr) {
     throw abcg::RuntimeError{"Cannot load font file"};
+  }
+  std::uniform_int_distribution<int> distribuicao(0, 1000);
+  // para cada fase
+  for (auto i = 0; i < (int)m_fases.size(); i++) {
+    fmt::print("fase: {}\n", i);
+    auto &fase = m_fases[i];
+    fase.m_points = 0; // pontos iniciais adquiridos naquela fase
+    
+    // preenche quais formas terao naquela fase
+    for (auto j = 0; j < (int)fase.m_targetForms.size(); j++){
+      int numero = distribuicao(m_randomEngine) % 2;
+      if (numero == 0) {
+        fase.m_targetForms[j] = Forms::SQUARE;
+        fmt::print("adicionou um quadrado\n");
+      } else {
+        fase.m_targetForms[j] = Forms::SPHERE;
+        fmt::print("adicionou um circulo\n");
+      }
+    }
+    
+    // alvo é uma forma aleatoria dos alvos criados na fase
+    // garante que sempre vai ter um alvo valido
+    int selecAlvo = distribuicao(m_randomEngine) % (int)fase.m_targetForms.size();
+    fase.m_targetForm = fase.m_targetForms[selecAlvo];
+
+    // seleciona cor aleatoria entre verde e vermelho
+    int selecCor = distribuicao(m_randomEngine) % 2;
+    fase.m_targetColor = m_colors[selecCor];
   }
 }
 
@@ -116,9 +108,9 @@ void Window::onUpdate() {
   auto const deltaTime{gsl::narrow_cast<float>(getDeltaTime())};
   
   m_timeAcc += deltaTime;
-  // Troca de forma a cada 2 segundos
-  if (m_timeAcc >= 2.0f) {
-    m_actualTargForm = (m_actualTargForm == Forms::SPHERE) ? Forms::SQUARE : Forms::SPHERE;
+    // Troca de forma a cada 2 segundos
+  if (m_timeAcc >= 5.0f) {
+    m_faseAtual++;
     m_timeAcc = 0.0f; // Reinicia o acumulador
   }
 
@@ -214,7 +206,7 @@ void Window::onPaint() {
   abcg::glUniformMatrix4fv(projMatrixLoc, 1, GL_FALSE,
                            &m_camera.getProjMatrix()[0][0]);
 
-  renderTargets(colorLoc, modelMatrixLoc);
+  renderTargets(colorLoc, modelMatrixLoc, m_fases[m_faseAtual]);
 
   // Render each star
   for (auto &star : m_stars) {
@@ -233,66 +225,72 @@ void Window::onPaint() {
   abcg::glUseProgram(0);
 }
 
-void Window::renderTargets(GLint colorLoc, GLint modelMatrixLoc){
+void Window::renderTargets(GLint colorLoc, GLint modelMatrixLoc, Fases fase){
   for (auto i = 0; i < (int)m_alvos.size(); i++) {
     auto &alvo = m_alvos[i];
     glm::mat4 model{1.0f};
-    glm::vec3 targetPosition{};
+    glm::vec3 targetPosition = m_targetScreenPos[i];
+
+    alvo.m_positionTarget = targetPosition;
+    model = glm::translate(model, alvo.m_positionTarget);
+    model = glm::rotate(model, m_angle, alvo.m_rotationAxis);
+
+    if (fase.m_targetForms[i] == Forms::SQUARE) {
+      alvo.m_scaleTarget = {0.2f, 0.2f, 0.2f};
+    }
+
+    model = glm::scale(model, alvo.m_scaleTarget);
 
     if (i == 0) {
-      targetPosition = {0.25f, 0.25f, -1.0f};
-      abcg::glUniform4f(colorLoc, 1.0f, 0.0f, 0.00f, 1.0f); // White
 
-      alvo.m_positionTarget = targetPosition;
-      model = glm::translate(model, alvo.m_positionTarget);
-      model = glm::rotate(model, m_angle, alvo.m_rotationAxis);
-      model = glm::scale(model, alvo.m_scaleTarget);
-
-      // atribui o modelo na matriz de modelo do vertex shader
+      abcg::glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // White
       abcg::glUniformMatrix4fv(modelMatrixLoc, 1, GL_FALSE, &model[0][0]);
-      if (!alvo.m_hit)
-        m_modelSphere.render(m_trianglesToDraw);
+      if (!alvo.m_hit) {
+        if (fase.m_targetForms[i] == Forms::SQUARE) {
+          m_modelSquare.render(m_trianglesToDraw);
+        } else {
+          m_modelSphere.render(m_trianglesToDraw);
+        }
+      }
 
     } else if (i == 1) {
-      targetPosition = {-0.25f, 0.25f, -1.0f};
-      alvo.m_positionTarget = targetPosition;
-      model = glm::translate(model, alvo.m_positionTarget);
-      model = glm::rotate(model, m_angle, alvo.m_rotationAxis);
-      model = glm::scale(model, alvo.m_scaleTarget);
 
-      // atribui o modelo na matriz de modelo do vertex shader
       abcg::glUniformMatrix4fv(modelMatrixLoc, 1, GL_FALSE, &model[0][0]);
       abcg::glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // White
       
-      if (!alvo.m_hit)
-        m_modelSquare.render(m_trianglesToDraw);
+      if (!alvo.m_hit) {
+        if (fase.m_targetForms[i] == Forms::SQUARE) {
+          m_modelSquare.render(m_trianglesToDraw);
+        } else {
+          m_modelSphere.render(m_trianglesToDraw);
+        }
+      }
 
     } else if (i == 2) {
-      targetPosition = {-0.25f, -0.25f, -1.0f};
-      alvo.m_positionTarget = targetPosition;
-      model = glm::translate(model, alvo.m_positionTarget);
-      model = glm::rotate(model, m_angle, alvo.m_rotationAxis);
-      model = glm::scale(model, alvo.m_scaleTarget);
 
-      // atribui o modelo na matriz de modelo do vertex shader
       abcg::glUniformMatrix4fv(modelMatrixLoc, 1, GL_FALSE, &model[0][0]);
       abcg::glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // White
       
-      if (!alvo.m_hit)
-        m_modelSquare.render(m_trianglesToDraw);
+      if (!alvo.m_hit) {
+        if (fase.m_targetForms[i] == Forms::SQUARE) {
+          m_modelSquare.render(m_trianglesToDraw);
+        } else {
+          m_modelSphere.render(m_trianglesToDraw);
+        }
+      }
 
     } else {
-      targetPosition = {0.25f, -0.25f, -1.0f};
-      alvo.m_positionTarget = targetPosition;
-      model = glm::translate(model, alvo.m_positionTarget);
-      model = glm::rotate(model, m_angle, alvo.m_rotationAxis);
-      model = glm::scale(model, alvo.m_scaleTarget);
 
-      // atribui o modelo na matriz de modelo do vertex shader
       abcg::glUniformMatrix4fv(modelMatrixLoc, 1, GL_FALSE, &model[0][0]);
       abcg::glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // White
-      if (!alvo.m_hit)
-        m_modelSphere.render(m_trianglesToDraw);
+
+      if (!alvo.m_hit) {
+        if (fase.m_targetForms[i] == Forms::SQUARE) {
+          m_modelSquare.render(m_trianglesToDraw);
+        } else {
+          m_modelSphere.render(m_trianglesToDraw);
+        }
+      }
     }
   }
 }
@@ -325,19 +323,30 @@ void Window::onPaintUI() {
     
     // Posição inicial para desenhar dentro do widget
     ImVec2 widgetPos = ImGui::GetCursorScreenPos();
-
-    if (m_actualTargForm == Forms::SPHERE) {
+    
+    Fases fase = m_fases[m_faseAtual];
+    if (fase.m_targetForm == Forms::SPHERE) {
       // Desenhar um círculo preenchido
       drawList->AddCircleFilled(
           ImVec2(widgetPos.x + 105, widgetPos.y + 55), // Centro
           50.0f,                                       // Raio
-          IM_COL32(0, 255, 0, 255)                     // Cor (verde)
+          IM_COL32(
+          fase.m_targetColor.x, 
+          fase.m_targetColor.y, 
+          fase.m_targetColor.z, 
+          fase.m_targetColor.w)             
       );
     } else {
       drawList->AddRectFilled(
           ImVec2(widgetPos.x + 55, widgetPos.y + 10),  // Canto superior esquerdo
           ImVec2(widgetPos.x + 160, widgetPos.y + 105), // Canto inferior direito
-          IM_COL32(0, 255, 0, 255)                     // Cor (verde)
+          
+          IM_COL32(
+          fase.m_targetColor.x, 
+          fase.m_targetColor.y, 
+          fase.m_targetColor.z, 
+          fase.m_targetColor.w)                     // Cor (verde)
+
       );
     }
 
