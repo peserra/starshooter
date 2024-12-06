@@ -108,7 +108,7 @@ void Window::onUpdate() {
   
   if (m_reduceFOV) {
     m_timeAccFOV += deltaTime; // Acumula tempo
-    float const duration = 1.0f; // Duração da transição em segundos
+    float const duration = 0.5f; // Duração da transição em segundos
     if (m_timeAccFOV <= duration) {
       // Interpola o FOV de 170 para 70
       float const t = m_timeAccFOV / duration; // Normaliza entre 0 e 1
@@ -125,6 +125,8 @@ void Window::onUpdate() {
     if (m_faseAtual == (int)m_fases.size()){
       m_faseAtual = 0;
       m_camera.m_FOV = 170.0f;
+      m_timeAccFOV = 0;
+      m_reduceFOV = false;
       m_gameStatus = GameStatus::ON_MENU;
     }
     m_timeAcc += deltaTime;
