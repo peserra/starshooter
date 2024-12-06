@@ -64,7 +64,6 @@ void Window::onCreate() {
   std::uniform_int_distribution<int> distribuicao(0, 1000);
   // para cada fase
   for (auto i = 0; i < (int)m_fases.size(); i++) {
-    fmt::print("fase: {}\n", i);
     auto &fase = m_fases[i];
     fase.m_points = 0; // pontos iniciais adquiridos naquela fase
     
@@ -73,10 +72,8 @@ void Window::onCreate() {
       int numero = distribuicao(m_randomEngine) % 2;
       if (numero == 0) {
         fase.m_targetForms[j] = Forms::SQUARE;
-        fmt::print("adicionou um quadrado\n");
       } else {
         fase.m_targetForms[j] = Forms::SPHERE;
-        fmt::print("adicionou um circulo\n");
       }
     }
     
@@ -89,6 +86,8 @@ void Window::onCreate() {
     int selecCor = distribuicao(m_randomEngine) % 2;
     fase.m_targetColor = m_colors[selecCor];
   }
+
+  m_camera.m_FOV = 170.0f;
 }
 
 void Window::randomizeStar(Star &star) {
@@ -107,11 +106,38 @@ void Window::onUpdate() {
   // Increase angle by 90 degrees per second
   auto const deltaTime{gsl::narrow_cast<float>(getDeltaTime())};
   
-  m_timeAcc += deltaTime;
-    // Troca de forma a cada 2 segundos
-  if (m_timeAcc >= 5.0f) {
-    m_faseAtual++;
-    m_timeAcc = 0.0f; // Reinicia o acumulador
+  if (m_reduceFOV) {
+    m_timeAccFOV += deltaTime; // Acumula tempo
+    float const duration = 1.0f; // Duração da transição em segundos
+    if (m_timeAccFOV <= duration) {
+      // Interpola o FOV de 170 para 70
+      float const t = m_timeAccFOV / duration; // Normaliza entre 0 e 1
+      m_camera.m_FOV = glm::mix(170.0f, 70.0f, t);
+    } else {
+      // Garante que o FOV finalize em 70 e termina a transição
+      m_camera.m_FOV = 70.0f;
+      m_reduceFOV = false; // Finaliza a transição
+    }
+  }
+
+
+  if (m_gameStatus == GameStatus::PLAYING) {
+    if (m_faseAtual == (int)m_fases.size()){
+      m_faseAtual = 0;
+      m_camera.m_FOV = 170.0f;
+      m_gameStatus = GameStatus::ON_MENU;
+    }
+    m_timeAcc += deltaTime;
+    if (m_timeAcc >= 6.0f) {
+      fmt::print("fase {}\n", m_faseAtual);  
+      for (auto &a: m_alvos){
+        // reseta os alvos quando muda de fase
+        a.m_hit = false; 
+        a.m_alreadyComputePoint = false;
+      }
+      m_faseAtual++;
+      m_timeAcc = 0.0f; // Reinicia o acumulador
+    }
   }
 
   // control camera movement
@@ -134,8 +160,10 @@ void Window::onUpdate() {
       star.m_position.z = -100.0f; // Back to -00
     }
   }
-
-  detectTargetPosition();
+  if (m_gameStatus == GameStatus::PLAYING){
+    detectTargetPosition();
+    computePoints();
+  }
 }
 
 void Window::detectTargetPosition() {
@@ -187,6 +215,37 @@ void Window::detectTargetPosition() {
   }
 }
 
+void Window::computePoints(){
+  auto faseAtual = m_fases[m_faseAtual];
+  auto corAtual = faseAtual.m_targetColor;
+  auto formaAtual = faseAtual.m_targetForm;
+
+  for (auto i = 0; i < (int)m_alvos.size(); i++) {
+    auto &a = m_alvos[i];
+    if (!a.m_hit)
+      continue;
+    
+    if(a.m_alreadyComputePoint)
+      continue;
+
+    // cor atual eh verde ?
+    if (corAtual == m_colors[0]){
+      if (formaAtual == faseAtual.m_targetForms[i]) {
+        m_totalPoints += 100;
+      } else {
+        m_totalPoints -= 50;
+      }
+    } else {
+      if (formaAtual != faseAtual.m_targetForms[i]) {
+        m_totalPoints += 100;
+      } else {
+        m_totalPoints -= 50;
+      }
+    }
+    a.m_alreadyComputePoint = true;
+  }
+}
+
 void Window::onPaint() {
   abcg::glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -206,7 +265,11 @@ void Window::onPaint() {
   abcg::glUniformMatrix4fv(projMatrixLoc, 1, GL_FALSE,
                            &m_camera.getProjMatrix()[0][0]);
 
-  renderTargets(colorLoc, modelMatrixLoc, m_fases[m_faseAtual]);
+  abcg::glUniform4f(colorLoc, 1.0f, 1.0f, 1.0f, 1.0f); // White
+
+  if (m_gameStatus == GameStatus::PLAYING) {
+    renderTargets(colorLoc, modelMatrixLoc, m_fases[m_faseAtual]);
+  }
 
   // Render each star
   for (auto &star : m_stars) {
@@ -298,62 +361,98 @@ void Window::renderTargets(GLint colorLoc, GLint modelMatrixLoc, Fases fase){
 void Window::onPaintUI() {
   abcg::OpenGLWindow::onPaintUI();
 
-  {// Tamanho e posição do widget
-    auto const pointsWidget{ImVec2(210, 40)};
-    ImGui::PushFont(m_font);
-    ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - pointsWidget.x - 10,  10));
-    ImGui::SetNextWindowSize(pointsWidget);
-    ImGui::Begin("Points", nullptr, ImGuiWindowFlags_NoDecoration);
+  if (m_gameStatus == GameStatus::PLAYING) {
+    {// Tamanho e posição do widget
+      auto const pointsWidget{ImVec2(210, 40)};
+      ImGui::PushFont(m_font);
+      ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - pointsWidget.x - 10,  10));
+      ImGui::SetNextWindowSize(pointsWidget);
+      ImGui::Begin("Points", nullptr, ImGuiWindowFlags_NoDecoration);
 
-    // Mostrando os pontos
-    ImGui::Text("Pontos: %d", m_totalPoints);
-    ImGui::End();
-  }
-  {
-    // Tamanho e posição do widget
-    auto const widgetSize{ImVec2(210, 150)};
-    ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - widgetSize.x - 10, m_viewportSize.y - widgetSize.y - 10));
-    ImGui::SetNextWindowSize(widgetSize);
-    ImGui::Begin("Forms", nullptr, ImGuiWindowFlags_NoDecoration);
-    ImGui::PushFont(m_font);
-
-    ImGui::Text("Alvo");
-    // Obter o contexto de desenho
-    ImDrawList *drawList = ImGui::GetWindowDrawList();
-    
-    // Posição inicial para desenhar dentro do widget
-    ImVec2 widgetPos = ImGui::GetCursorScreenPos();
-    
-    Fases fase = m_fases[m_faseAtual];
-    if (fase.m_targetForm == Forms::SPHERE) {
-      // Desenhar um círculo preenchido
-      drawList->AddCircleFilled(
-          ImVec2(widgetPos.x + 105, widgetPos.y + 55), // Centro
-          50.0f,                                       // Raio
-          IM_COL32(
-          fase.m_targetColor.x, 
-          fase.m_targetColor.y, 
-          fase.m_targetColor.z, 
-          fase.m_targetColor.w)             
-      );
-    } else {
-      drawList->AddRectFilled(
-          ImVec2(widgetPos.x + 55, widgetPos.y + 10),  // Canto superior esquerdo
-          ImVec2(widgetPos.x + 160, widgetPos.y + 105), // Canto inferior direito
-          
-          IM_COL32(
-          fase.m_targetColor.x, 
-          fase.m_targetColor.y, 
-          fase.m_targetColor.z, 
-          fase.m_targetColor.w)                     // Cor (verde)
-
-      );
+      // Mostrando os pontos
+      ImGui::Text("Pontos: %d", m_totalPoints);
+      ImGui::End();
     }
+    {
+      // Tamanho e posição do widget
+      auto const widgetSize{ImVec2(210, 150)};
+      ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - widgetSize.x - 10, m_viewportSize.y - widgetSize.y - 10));
+      ImGui::SetNextWindowSize(widgetSize);
+      ImGui::Begin("Forms", nullptr, ImGuiWindowFlags_NoDecoration);
+      ImGui::PushFont(m_font);
 
-    // Desenhar um quadrado preenchido
+      ImGui::Text("Alvo");
+      // Obter o contexto de desenho
+      ImDrawList *drawList = ImGui::GetWindowDrawList();
+      
+      // Posição inicial para desenhar dentro do widget
+      ImVec2 widgetPos = ImGui::GetCursorScreenPos();
+      
+      Fases fase = m_fases[m_faseAtual];
+      auto targetColor = fase.m_targetColor * 255.0f;
+      if (fase.m_targetForm == Forms::SPHERE) {
+        // Desenhar um círculo preenchido
+        drawList->AddCircleFilled(
+            ImVec2(widgetPos.x + 105, widgetPos.y + 55), // Centro
+            50.0f,                                       // Raio
+            IM_COL32(targetColor.x, targetColor.y, targetColor.z, targetColor.w)             
+        );
+      } else {
+        drawList->AddRectFilled(
+            ImVec2(widgetPos.x + 55, widgetPos.y + 10),  // Canto superior esquerdo
+            ImVec2(widgetPos.x + 160, widgetPos.y + 105), // Canto inferior direito
+            IM_COL32(targetColor.x, targetColor.y, targetColor.z, targetColor.w)             
+        );
+      }
+
+      // Desenhar um quadrado preenchido
+
+      ImGui::End();
+    }
+  } else {
+{
+    // Tamanho e posição do widget
+    auto const widgetSize{ImVec2(500, 170)};
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::SetNextWindowPos(ImVec2((m_viewportSize.x / 2) - widgetSize.x / 2, 
+                                   (m_viewportSize.y / 2) - widgetSize.y / 2));
+    ImGui::SetNextWindowSize(widgetSize);
+    ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoDecoration);
+
+    // Centralizando o título
+    auto const titleText = "Starshooter";
+    auto const textSize = ImGui::CalcTextSize(titleText);
+    ImGui::SetCursorPosX((widgetSize.x - textSize.x) / 2);
+    
+    // Fonte maior para o título
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::Text("%s", titleText);
+    ImGui::PopFont();
+
+    // Espaço entre o título e o botão
+    ImGui::Dummy(ImVec2(0.0f, 20.0f));
+
+    // Centralizando o botão
+    auto const buttonSize = ImVec2(200, 50); // Botão maior
+    ImGui::SetCursorPosX((widgetSize.x - buttonSize.x) / 2);
+    if (ImGui::Button("Start", buttonSize)) {
+        // Ação ao clicar no botão
+        m_gameStatus = GameStatus::PLAYING;
+        m_totalPoints = 0;
+        m_reduceFOV = true;
+    }
+    ImGui::Dummy(ImVec2(0.0f, 20.0f));
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::Text("Total points: %d", m_totalPoints);
+    ImGui::PopFont();
+
 
     ImGui::End();
+    ImGui::PopFont();
+}
+
   }
+
 }
 
 void Window::onResize(glm::ivec2 const &size) {

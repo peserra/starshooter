@@ -28,11 +28,14 @@ private:
   ImFont *m_font{};
   glm::ivec2 m_viewportSize{};
 
+  enum class GameStatus {PLAYING, ON_MENU};
+  GameStatus m_gameStatus{GameStatus::ON_MENU};
+
   enum class Forms {SQUARE, SPHERE};
   std::array <glm::vec4, 2> m_colors{m_Green, m_Red};
-
-  Forms m_actualTargForm{Forms::SPHERE};
   float m_timeAcc{1.0f};
+  float m_timeAccFOV{0.0f};
+  bool m_reduceFOV{false};
 
   Model m_model;
   Model m_modelSphere;
@@ -61,6 +64,7 @@ private:
     glm::vec3 m_rotationAxis{};
     bool m_mouseInside{false};
     bool m_hit{false};
+    bool m_alreadyComputePoint{false};
   };
 
   int m_faseAtual{0};
@@ -106,6 +110,7 @@ private:
   // estrela passada como parametro
   void randomizeStar(Star &star);
   void detectTargetPosition();
+  void computePoints();
   void renderTargets(GLint colorLoc, GLint modelMatrixLoc, Fases fase);
 };
 
