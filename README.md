@@ -8,7 +8,7 @@ coordenação.
 - **Geração Aleatória de Formas:** Cubos e esferas aparecem aleatoriamente na tela em diferentes posições e tamanhos, em cada fase.
 - **Interação do Jogador:** Clique nas formas corretas para ganhar pontos.
 - **Efeito de Starfield:** Fundo animado com esferas que se movem em direção à câmera, simulando um campo de estrelas.
-- **Pontuação:** Sistema de pontuação que recompensa acertos e penalidade em erros.
+- **Pontuação:** Sistema de pontuação que recompensa acertos e penaliza erros.
 - **Gráficos 3D:** Renderização de formas em 3D para uma melhor experiência visual.
 
 ## Tecnologias Utilizadas
@@ -29,8 +29,9 @@ Para a janela temos que os seguintes métodos foram sobrescritos:
    - onPaintUI()
    - onResize()
    - onDestroy()
+   - computePoints()
 
-O Window::onCreate inicializa os recursos e configurações necessários para o funcionamento do jogo. Ele configura o OpenGL com fundo preto e teste de profundidade, carrega e prepara os shaders e modelos 3D (como esferas e cubos), define a matriz de visão da câmera e inicializa elementos da cena, como estrelas e alvos com eixos de rotação aleatórios. Além disso, prepara as fases do jogo, gerando formas e cores-alvo de maneira aleatória, e carrega uma fonte para a interface gráfica. Esse método garante que todos os elementos estejam configurados antes do início da execução.
+O onCreate() inicializa os recursos e configurações necessários para o funcionamento do jogo. Ele configura o OpenGL com fundo preto e teste de profundidade, carrega e prepara os shaders e modelos 3D (como esferas e cubos), define a matriz de visão da câmera e inicializa elementos da cena, como estrelas e alvos com eixos de rotação aleatórios. Além disso, prepara as fases do jogo, gerando formas e cores-alvo de maneira aleatória, e carrega uma fonte para a interface gráfica. Esse método garante que todos os elementos estejam configurados antes do início da execução. A animação de mudança de fase é gerada por um aumento repentino do FOV da câmera de 70 para 170.
 
 ```cpp
 void Window::onCreate() {
@@ -102,7 +103,6 @@ void Window::onCreate() {
 
   m_camera.m_FOV = 170.0f;
 }
-
 ```
 
 O onEvent() é chamado para lidar com eventos do SDL, no nosso caso foi sobrescrito para lidar com movimento do mouse e clicks do mouse. Atribuindo a uma variável global m_mousePosition os valores das coordenadas do mouse, sempre que o mesmo for movido. Caso o evento seja um click do mouse então se checa o mouse está dentro do hitbox dos alvos (as esferas ou os cubos) para se setar o valor de alvo.m_hit como true, marcando que o alvo foi acertado.
@@ -125,7 +125,7 @@ void Window::onEvent(SDL_Event const &event) {
 }
 ```
 
-O Window::onUpdate é responsável por atualizar o estado da janela e seus elementos a cada quadro. Ele incrementa o tempo acumulado para alternar a fase do jogo a cada 5 segundos, atualiza a posição da câmera com base nos comandos de movimento e calcula a nova matriz de projeção. As estrelas na cena têm suas posições incrementadas ao longo do eixo Z, retornando a uma posição aleatória com coordenada z = -100 quando passam pela câmera, criando um efeito de movimento contínuo. Além disso, ele chama o método detectTargetPosition, que calcula as coordenadas dos alvos na tela com base nas transformações da câmera, determina o raio aparente dos alvos, e verifica se o cursor do mouse está dentro dos limites de cada alvo, atualizando o estado correspondente (m_mouseInside). Esse método garante a atualização contínua da lógica e dos elementos gráficos do jogo.
+O onUpdate() é responsável por atualizar o estado da janela e seus elementos a cada quadro. Ele incrementa o tempo acumulado para alternar a fase do jogo a cada 5 segundos, atualiza a posição da câmera com base nos comandos de movimento e calcula a nova matriz de projeção. As estrelas na cena têm suas posições incrementadas ao longo do eixo Z, retornando a uma posição aleatória com coordenada z = -100 quando passam pela câmera, criando um efeito de movimento contínuo. Além disso, ele chama o método detectTargetPosition, que calcula as coordenadas dos alvos na tela com base nas transformações da câmera, determina o raio aparente dos alvos, e verifica se o cursor do mouse está dentro dos limites de cada alvo, atualizando o estado correspondente (m_mouseInside). Esse método garante a atualização contínua da lógica e dos elementos gráficos do jogo.
 
 ```cpp
 void Window::onUpdate() {
@@ -193,7 +193,7 @@ void Window::onUpdate() {
 }
 ```
 
-O Window::onPaint é responsável por renderizar a cena na tela a cada quadro. Ele limpa o buffer de cor e profundidade, configura o viewport e ativa o programa de shaders usado para desenhar os objetos. Matrizes de visão e projeção da câmera são enviadas como variáveis uniformes para os shaders. Em seguida, o método renderiza os alvos da fase atual por meio de renderTargets, e cada estrela na cena é renderizada individualmente, com sua matriz de modelo calculada para aplicar transformações de posição, escala e rotação. Finalmente, o programa de shaders é desativado, completando o ciclo de renderização.
+O onPaint() é responsável por renderizar a cena na tela a cada quadro. Ele limpa o buffer de cor e profundidade, configura o viewport e ativa o programa de shaders usado para desenhar os objetos. Matrizes de visão e projeção da câmera são enviadas como variáveis uniformes para os shaders. Em seguida, o método renderiza os alvos da fase atual por meio de renderTargets, e cada estrela na cena é renderizada individualmente, com sua matriz de modelo calculada para aplicar transformações de posição, escala e rotação. Finalmente, o programa de shaders é desativado, completando o ciclo de renderização.
 
 ```cpp
 void Window::onPaint() {
@@ -239,45 +239,104 @@ void Window::onPaint() {
 }
 ```
 
-O método `Window::onPaintUI` é responsável por renderizar a interface gráfica do jogo utilizando a biblioteca ImGui. Ele exibe dois widgets: um no topo direito para mostrar a pontuação total do jogador e outro no canto inferior direito para indicar a forma e a cor do alvo atual. O método configura o tamanho e a posição de cada widget, utiliza uma fonte personalizada e, no caso do widget do alvo, desenha dinamicamente uma esfera ou um retângulo preenchido, dependendo do formato-alvo da fase atual, com a cor associada. Isso proporciona ao jogador informações visuais claras sobre o objetivo da fase e sua pontuação.
+O onPaintUI() é responsável por renderizar a interface gráfica do jogo utilizando a biblioteca ImGui. Ele exibe dois widgets: um no topo direito para mostrar a pontuação total do jogador e outro no canto inferior direito para indicar a forma e a cor do alvo atual. O método configura o tamanho e a posição de cada widget, utiliza uma fonte personalizada e, no caso do widget do alvo, desenha dinamicamente uma esfera ou um retângulo preenchido, dependendo do formato-alvo da fase atual, com a cor associada. Isso proporciona ao jogador informações visuais claras sobre o objetivo da fase e sua pontuação.
 
 ```cpp
-void Window::onPaint() {
-  abcg::glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+void Window::onPaintUI() {
+  abcg::OpenGLWindow::onPaintUI();
 
-  abcg::glViewport(0, 0, m_viewportSize.x, m_viewportSize.y);
+  if (m_gameStatus == GameStatus::PLAYING) {
+    {// Tamanho e posição do widget
+      auto const pointsWidget{ImVec2(210, 40)};
+      ImGui::PushFont(m_font);
+      ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - pointsWidget.x - 10,  10));
+      ImGui::SetNextWindowSize(pointsWidget);
+      ImGui::Begin("Points", nullptr, ImGuiWindowFlags_NoDecoration);
 
-  abcg::glUseProgram(m_program);
+      // Mostrando os pontos
+      ImGui::Text("Pontos: %d", m_totalPoints);
+      ImGui::End();
+    }
+    {
+      // Tamanho e posição do widget
+      auto const widgetSize{ImVec2(210, 150)};
+      ImGui::SetNextWindowPos(ImVec2(m_viewportSize.x - widgetSize.x - 10, m_viewportSize.y - widgetSize.y - 10));
+      ImGui::SetNextWindowSize(widgetSize);
+      ImGui::Begin("Forms", nullptr, ImGuiWindowFlags_NoDecoration);
+      ImGui::PushFont(m_font);
 
-  // Get location of uniform variables
-  auto const viewMatrixLoc{abcg::glGetUniformLocation(m_program, "viewMatrix")};
-  auto const projMatrixLoc{abcg::glGetUniformLocation(m_program, "projMatrix")};
-  auto const modelMatrixLoc{
-      abcg::glGetUniformLocation(m_program, "modelMatrix")};
-  auto const colorLoc{abcg::glGetUniformLocation(m_program, "color")};
+      ImGui::Text("Alvo");
+      // Obter o contexto de desenho
+      ImDrawList *drawList = ImGui::GetWindowDrawList();
+      
+      // Posição inicial para desenhar dentro do widget
+      ImVec2 widgetPos = ImGui::GetCursorScreenPos();
+      
+      Fases fase = m_fases[m_faseAtual];
+      auto targetColor = fase.m_targetColor * 255.0f;
+      if (fase.m_targetForm == Forms::SPHERE) {
+        // Desenhar um círculo preenchido
+        drawList->AddCircleFilled(
+            ImVec2(widgetPos.x + 105, widgetPos.y + 55), // Centro
+            50.0f,                                       // Raio
+            IM_COL32(targetColor.x, targetColor.y, targetColor.z, targetColor.w)             
+        );
+      } else {
+        drawList->AddRectFilled(
+            ImVec2(widgetPos.x + 55, widgetPos.y + 10),  // Canto superior esquerdo
+            ImVec2(widgetPos.x + 160, widgetPos.y + 105), // Canto inferior direito
+            IM_COL32(targetColor.x, targetColor.y, targetColor.z, targetColor.w)             
+        );
+      }
 
-  abcg::glUniformMatrix4fv(viewMatrixLoc, 1, GL_FALSE,
-                           &m_camera.getViewMatrix()[0][0]);
-  abcg::glUniformMatrix4fv(projMatrixLoc, 1, GL_FALSE,
-                           &m_camera.getProjMatrix()[0][0]);
+      // Desenhar um quadrado preenchido
 
-  renderTargets(colorLoc, modelMatrixLoc, m_fases[m_faseAtual]);
+      ImGui::End();
+    }
+  } else {
+{
+    // Tamanho e posição do widget
+    auto const widgetSize{ImVec2(500, 170)};
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::SetNextWindowPos(ImVec2((m_viewportSize.x / 2) - widgetSize.x / 2, 
+                                   (m_viewportSize.y / 2) - widgetSize.y / 2));
+    ImGui::SetNextWindowSize(widgetSize);
+    ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_NoDecoration);
 
-  // Render each star
-  for (auto &star : m_stars) {
-    // Compute model matrix of the current star
-    glm::mat4 modelMatrix{1.0f};
-    modelMatrix = glm::translate(modelMatrix, star.m_position);
-    modelMatrix = glm::scale(modelMatrix, glm::vec3(0.15f));
-    modelMatrix = glm::rotate(modelMatrix, m_angle, star.m_rotationAxis);
+    // Centralizando o título
+    auto const titleText = "Starshooter";
+    auto const textSize = ImGui::CalcTextSize(titleText);
+    ImGui::SetCursorPosX((widgetSize.x - textSize.x) / 2);
+    
+    // Fonte maior para o título
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::Text("%s", titleText);
+    ImGui::PopFont();
 
-    // Set uniform variable
-    abcg::glUniformMatrix4fv(modelMatrixLoc, 1, GL_FALSE, &modelMatrix[0][0]);
+    // Espaço entre o título e o botão
+    ImGui::Dummy(ImVec2(0.0f, 20.0f));
 
-    m_model.render();
+    // Centralizando o botão
+    auto const buttonSize = ImVec2(200, 50); // Botão maior
+    ImGui::SetCursorPosX((widgetSize.x - buttonSize.x) / 2);
+    if (ImGui::Button("Start", buttonSize)) {
+        // Ação ao clicar no botão
+        m_gameStatus = GameStatus::PLAYING;
+        m_totalPoints = 0;
+        m_reduceFOV = true;
+    }
+    ImGui::Dummy(ImVec2(0.0f, 20.0f));
+    ImGui::PushFont(m_font); // Fonte padrão
+    ImGui::Text("Total points: %d", m_totalPoints);
+    ImGui::PopFont();
+
+
+    ImGui::End();
+    ImGui::PopFont();
+}
+
   }
 
-  abcg::glUseProgram(0);
 }
 ```
 
@@ -290,7 +349,7 @@ Além da classe da janela, temos a classe do modelo. Que ficou responsável por 
    - createBuffers()
    - standardize()
 
-O método `Model::loadObj` carrega um modelo 3D no formato OBJ de um arquivo especificado pelo caminho `path` e converte seus dados em uma estrutura utilizável para renderização. Ele utiliza a biblioteca `tinyobjloader` para processar o arquivo OBJ, extrair atributos como posições dos vértices e organizá-los em listas de vértices e índices (`m_vertices` e `m_indices`). Para evitar duplicatas, um mapa de hash associa vértices únicos a índices, otimizando o uso de dados. Caso a opção `standardize` seja ativada, o modelo é padronizado para ajustar sua escala e posição. Finalmente, o método chama `createBuffers` para configurar os buffers necessários para renderização. Ele também trata erros e avisos relacionados ao carregamento do arquivo.
+O loadObj() carrega um modelo 3D no formato OBJ de um arquivo especificado pelo caminho `path` e converte seus dados em uma estrutura utilizável para renderização. Ele utiliza a biblioteca `tinyobjloader` para processar o arquivo OBJ, extrair atributos como posições dos vértices e organizá-los em listas de vértices e índices (`m_vertices` e `m_indices`). Para evitar duplicatas, um mapa de hash associa vértices únicos a índices, otimizando o uso de dados. Caso a opção `standardize` seja ativada, o modelo é padronizado para ajustar sua escala e posição. Finalmente, o método chama `createBuffers` para configurar os buffers necessários para renderização. Ele também trata erros e avisos relacionados ao carregamento do arquivo.
 
 ```cpp
 void Model::loadObj(std::string_view path, bool standardize) {
@@ -352,7 +411,7 @@ void Model::loadObj(std::string_view path, bool standardize) {
 }
 ```
 
-O método Model::render é responsável por renderizar o modelo 3D utilizando os dados de vértices e índices armazenados no VAO (Vertex Array Object). Ele vincula o VAO correspondente ao modelo, calcula o número de índices a ser desenhado (com base no número de triângulos fornecido ou no total de índices do modelo), e em seguida, realiza a renderização com a função glDrawElements para desenhar os triângulos. Após a renderização, o VAO é desvinculado, finalizando o processo de renderização.
+O render() é responsável por renderizar o modelo 3D utilizando os dados de vértices e índices armazenados no VAO (Vertex Array Object). Ele vincula o VAO correspondente ao modelo, calcula o número de índices a ser desenhado (com base no número de triângulos fornecido ou no total de índices do modelo), e em seguida, realiza a renderização com a função glDrawElements para desenhar os triângulos. Após a renderização, o VAO é desvinculado, finalizando o processo de renderização.
 
 ```cpp
 void Model::render(int numTriangles) const {
@@ -367,7 +426,7 @@ void Model::render(int numTriangles) const {
 }
 ```
 
-O método `Model::setupVAO` configura o Vertex Array Object (VAO) do modelo para preparar os dados de vértices e índices para renderização. Primeiro, ele remove qualquer VAO anterior e cria um novo. Em seguida, vincula os buffers de índices (EBO) e vértices (VBO) ao VAO. O método também vincula o atributo de posição dos vértices ao shader program usando a localização do atributo no programa de shaders. Após configurar o atributo de posição, ele termina o processo de vinculação dos buffers e do VAO, preparando o modelo para ser renderizado.
+O setupVAO() configura o Vertex Array Object (VAO) do modelo para preparar os dados de vértices e índices para renderização. Primeiro, ele remove qualquer VAO anterior e cria um novo. Em seguida, vincula os buffers de índices (EBO) e vértices (VBO) ao VAO. O método também vincula o atributo de posição dos vértices ao shader program usando a localização do atributo no programa de shaders. Após configurar o atributo de posição, ele termina o processo de vinculação dos buffers e do VAO, preparando o modelo para ser renderizado.
 
 ```cpp
 void Model::setupVAO(GLuint program) {
@@ -399,15 +458,12 @@ void Model::setupVAO(GLuint program) {
 
 A lógica de câmera look at é feita pala classe câmera. Que contêm os seguintes métodos:
 
-   - dolly()
-   - truck()
-   - pan()
    - setEye()
    - setAt()
    - setUp()
    - setFov()
 
-Essa implementação de uma câmera "LookAt" utiliza a biblioteca GLM para calcular e manipular as matrizes de projeção e visão de uma câmera 3D. A câmera é configurada com uma posição (`eye`), um ponto de interesse (`at`) e um vetor para cima (`up`). O método `computeProjectionMatrix` calcula a matriz de projeção perspectiva com base no campo de visão (FOV) e a proporção da janela, enquanto o método `computeViewMatrix` cria a matriz de visão com a função `glm::lookAt`, que orienta a câmera para o ponto de interesse. A câmera permite três tipos de movimentação: `dolly`, que move a câmera para frente ou para trás; `truck`, que move a câmera lateralmente (para esquerda ou direita); e `pan`, que rotaciona a câmera em torno do seu eixo local, ajustando o ponto de interesse. Cada movimento atualiza a matriz de visão da câmera. Além disso, os métodos `setEye`, `setAt` e `setUp` são usados para definir esses parâmetros e recalcular a matriz de visão automaticamente após cada alteração.
+Essa implementação de uma câmera "LookAt" utiliza a biblioteca GLM para calcular e manipular as matrizes de projeção e visão de uma câmera 3D. A câmera é configurada com uma posição (`eye`), um ponto de interesse (`at`) e um vetor para cima (`up`). O método `computeProjectionMatrix` calcula a matriz de projeção perspectiva com base no campo de visão (FOV) e a proporção da janela, enquanto o método `computeViewMatrix` cria a matriz de visão com a função `glm::lookAt`, que orienta a câmera para o ponto de interesse.
 
 ## Instalação
 
@@ -415,7 +471,7 @@ Essa implementação de uma câmera "LookAt" utiliza a biblioteca GLM para calcu
 
 - **C++ Compiler:** Compatível com C++17 ou superior.
 - **CMake:** Versão 3.10 ou superior.
-- **Biblioteca ABCg:** Certifique-se de ter a biblioteca ABCg instalada. Você pode cloná-la a partir do [repositório oficial](https://github.com/cx-org/abcg).
+- **Biblioteca ABCg:** Certifique-se de ter a biblioteca ABCg instalada.
 
 ### Passos de Instalação
 
@@ -451,5 +507,3 @@ Essa implementação de uma câmera "LookAt" utiliza a biblioteca GLM para calcu
      -  Círculo verde: Clique nas esferas;
      -  Quadrado vermelho: Clique nas esferas;
      -  Círculo vermelho: Clique nos cubos.
-
-
